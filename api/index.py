@@ -14,9 +14,6 @@ from bs4 import BeautifulSoup
 import json
 import re
 
-# Import Redis-based cache service
-from .cache import cache_service, get_cache, set_cache
-
 app = FastAPI(
     title="StockXpert ",
     description="A Stock Analysis Platform for Indian Markets",
@@ -31,7 +28,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Cache configuration is now handled in cache.py
+_cache = {}
+CACHE_TTL_SECONDS = 3600
+
+def set_cache(key: str, data: dict):
+    _cache[key] = {"timestamp": datetime.datetime.now(), "data": data}
+
+def get_cache(key: str):
+    if key in _cache:
+        cache_entry = _cache[key]
+        if (datetime.datetime.now() - cache_entry["timestamp"]).total_seconds() < CACHE_TTL_SECONDS:
+            return cache_entry["data"]
+    return None
 
 def scrape_nse_data(symbol: str, start_date: str, end_date: str):
     try:
@@ -346,28 +354,3 @@ async def get_stock_news(symbol: str):
 @app.get("/")
 async def root():
     return {"message": "StockXpert API is running!"}
-
-@app.get("/api/health")
-async def health_check():
-    """System health check including cache status"""
-    cache_health = cache_service.health_check()
-    return {
-        "status": "healthy",
-        "timestamp": datetime.datetime.now().isoformat(),
-        "cache": cache_health,
-        "api": "operational"
-    }
-
-@app.get("/api/cache/stats")
-async def cache_stats():
-    """Get cache statistics"""
-    return cache_service.get_cache_stats()
-
-@app.post("/api/cache/clear")
-async def clear_cache():
-    """Clear all cache entries"""
-    success = cache_service.clear_cache()
-    return {
-        "success": success,
-        "message": "Cache cleared successfully" if success else "Failed to clear cache"
-    }
